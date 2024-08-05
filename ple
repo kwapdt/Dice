@@ -1,0 +1,251 @@
+const ethers = require('ethers');
+const { Buffer } = require('buffer');
+const { keccak256 } = require('ethereumjs-util');
+const elliptic = require('elliptic');
+const crypto = require('crypto');
+const fs = require('fs');
+
+const ec = new elliptic.ec('secp256k1');
+
+class StealthAddress {
+  constructor() {
+    const ecs = new elliptic.ec('secp256k1');
+  }
+
+//   function generateKeyPair() {
+//     const key = ec.genKeyPair();
+//     return {
+//         privateKey: key.getPrivate(),
+//         publicKey: key.getPublic(),
+//     };
+// }
+
+  // Generate a new ephemeral key pair
+
+
+  // Generate a stealth address
+  generateStealthAddress(recipientPublicKey) {
+
+    // return { privateKey, publicKey };
+    const { privateKey: ephPrivateKey, publicKey: ephPublicKey } = this.generateEphemeralKeyPair();
+
+    const recipientPublicKeyPoint = ec.keyFromPublic(recipientPublicKey, 'hex').getPublic();
+    const ephemeralPublicKeyPoint = ec.keyFromPublic(ephPublicKey).getPublic();
+
+    const sharedSecretPoint = recipientPublicKeyPoint.mul(ephPrivateKey);
+
+    const pointBuffer = Buffer.from(sharedSecretPoint.encode('array'));
+    const hashedSecret = Buffer.from(keccak256(pointBuffer))
+    const bnHashedSecret = ec.keyFromPrivate(hashedSecret).getPrivate();
+
+    // Multiply the hashed shared secret with the generator point of the elliptic curve Kh=kh×G .
+
+    // const hashedSecret = ethers.keccak256(sharedSecretPoint);
+    console.log("sfsdf")
+    // recipientPublicKeyPoint, ephPrivateKey
+
+    // const sharedSecret = this.curve.multiply(recipientPublicKey, ephPrivateKey);
+    // const hashedSecret = ethers.utils.keccak256(sharedSecret);
+    const hue = ec.g
+
+    const Kh = ec.g.mul(bnHashedSecret);
+    const stealthPublicKey = Kh.add(recipientPublicKey);
+        
+    const stealthAddressHexPublicKey = stealthPublicKey.encode("hex", true)
+    const stealthAddress = ethers.computeAddress('0x' + stealthAddressHexPublicKey);
+    // stealthPublicKey.encode("hex", true)
+
+    return {
+      ephemeralPublicKey: ephPublicKey.encode("hex", true),
+      stealthPublicKey: stealthPublicKey.encode("hex", true),
+      stealthAddress
+    };
+  }
+
+//  async parseAndCheckStealthAddresses(privateKey, ephemeralPublicKeys) {
+//     const ownedAddresses = [];
+
+//     // const { privateKey: ephPrivateKey, publicKey: ephPublicKey } = this.generateEphemeralKeyPair();
+
+//     // const recipientPublicKeyPoint = ec.keyFromPublic(recipientPublicKey, 'hex').getPublic();
+//     // const ephemeralPublicKeyPoint = ec.keyFromPublic(ephPublicKey).getPublic();
+
+//     // const sharedSecretPoint = recipientPublicKeyPoint.mul(ephPrivateKey);
+
+//     // const pointBuffer = Buffer.from(sharedSecretPoint.encode('array'));
+//     // const hashedSecret = Buffer.from(keccak256(pointBuffer))
+//     // const bnHashedSecret = ec.keyFromPrivate(hashedSecret).getPrivate();
+
+//     for (const ephemeralPublicKey of ephemeralPublicKeys) {
+
+//     const ephemeralPublicKeyPoint = ec.keyFromPublic(ephemeralPublicKey, 'hex').getPublic();
+//     const sharedSecret = ephemeralPublicKeyPoint.mul(privateKey);
+//     const hashedSecret = keccak256(sharedSecret);
+//     const recipientPrivateKeyBn = recipientPrivateKey.getPrivate();
+//     const hashedSecretBn = ec.keyFromPrivate(hashedSecret).getPrivate();
+//     const stealthPrivateKey = recipientPrivateKeyBn.add(hashedSecretBn);
+//     // hashedSecret.add
+//     // const stealthPrivateKey = ethers.hexZeroPad(
+//     // ethers.BigNumber.from(privateKey).add(hashedSecret).toHexString(),
+//     // 32
+//     // );
+//     const stealthPublicKey = ec.keyFromPublic(ephemeralPublicKey, 'hex').getPublic();
+//     // const stealthPublicKey = this.curve.getPublicKey(stealthPrivateKey);
+//     // stealthPublicKey.encode("hex", true)
+//     const stealthAddress = ethers.utils.computeAddress("0x" + stealthPublicKey.encode("hex", true));
+
+//     // Check if this address has received any transactions or has a balance
+//     const hasActivity = await this.checkAddressActivity(stealthAddress);
+
+//     if (hasActivity) {
+//     ownedAddresses.push({
+//         stealthPrivateKey,
+//         stealthPublicKey,
+//         stealthAddress
+//     });
+//     }
+// }
+
+//     return ownedAddresses;
+//   }
+
+   // Parse and check stealth addresses
+   async parseAndCheckStealthAddresses(recipientPrivateKey, ephemeralPublicKeys) {
+    const ownedAddresses = [];
+
+    for (const ephemeralPublicKey of ephemeralPublicKeys) {
+    const ephemeralPublicKeyPoint = ec.keyFromPublic(ephemeralPublicKey, 'hex').getPublic();
+    const sharedSecret = ephemeralPublicKeyPoint.mul(recipientPrivateKey);
+    //   const sharedSecret = this.curve.multiply(ephemeralPublicKey, privateKey);
+    const hashedSecret = Buffer.from(keccak256(Buffer.from(sharedSecret.encode('array'))));
+    const recipientPrivateKeyBn = ec.keyFromPrivate(recipientPrivateKey).getPrivate();
+    const hashedSecretBn = ec.keyFromPrivate(hashedSecret).getPrivate();
+
+    // const hashedSecret = keccak256(sharedSecret);
+    // const recipientPrivateKeyBn = recipientPrivateKey.getPrivate();
+    // const hashedSecretBn = ec.keyFromPrivate(hashedSecret).getPrivate();
+    const stealthPrivateKey = recipientPrivateKeyBn.add(hashedSecretBn);
+
+    // const hashedSecret = keccak256(sharedSecret);
+    // const stealthPrivateKey = ethers.hexZeroPad(
+    // ethers.BigNumber.from(privateKey).add(hashedSecret).toHexString(),
+    // 32
+    // );
+    const stealthPublicKey = ec.keyFromPrivate(stealthPrivateKey).getPublic();
+    // const stealthPublicKey = ec.keyFromPrivate(recipientPrivateKey).getPublic();
+    // const stealthPublicKey = this.curve.getPublicKey(stealthPrivateKey);
+    const stealthAddress = ethers.computeAddress('0x' + stealthPublicKey.encode('hex', true));
+
+    // Check if this address has received any transactions or has a balance
+    // WIP PELASE FIX LASTER, SHOULD CHECK BLOCKCHAIN FOR TRANSACTION RELATED TO THE STEALTH ADDRESS
+    // const hasActivity = await this.checkAddressActivity(stealthAddress);
+    const hasActivity = true;
+
+    if (hasActivity) {
+    ownedAddresses.push({
+        stealthPrivateKey,
+        stealthPublicKey,
+        stealthAddress
+    });
+    }
+}
+
+    return ownedAddresses;
+  }
+
+  // Parse and check dual-key stealth addresses
+  async parseAndCheckDualKeyStealthAddresses(scanningPrivateKey, spendingPrivateKey, ephemeralPublicKeys) {
+    const ownedAddresses = [];
+
+    for (const ephemeralPublicKey of ephemeralPublicKeys) {
+      const sharedSecret = this.curve.multiply(ephemeralPublicKey, scanningPrivateKey);
+      const hashedSecret = ethers.utils.keccak256(sharedSecret);
+      const stealthPrivateKey = ethers.utils.hexZeroPad(
+        ethers.BigNumber.from(spendingPrivateKey).add(hashedSecret).toHexString(),
+        32
+      );
+      const stealthPublicKey = this.curve.getPublicKey(stealthPrivateKey);
+      const stealthAddress = ethers.utils.computeAddress(stealthPublicKey);
+
+      // Check if this address has received any transactions or has a balance
+      const hasActivity = await this.checkAddressActivity(stealthAddress);
+
+      if (hasActivity) {
+        ownedAddresses.push({
+          stealthPrivateKey,
+          stealthPublicKey,
+          stealthAddress
+        });
+      }
+    }
+
+    return ownedAddresses;
+  }
+
+  // Helper method to check if an address has any activity
+  async checkAddressActivity(address) {
+    // This is a placeholder. In a real implementation, you would:
+    // 1. Check the address balance
+    // 2. Check for any incoming transactions
+    // You'd typically use a blockchain explorer API or your own node for this
+    
+    const provider = new ethers.providers.JsonRpcProvider('YOUR_RPC_URL');
+    const balance = await provider.getBalance(address);
+    const transactionCount = await provider.getTransactionCount(address);
+
+    return !balance.isZero() || transactionCount > 0;
+  }
+
+  generateEphemeralKeyPair() {
+    const key = ec.genKeyPair()
+    // const key = this.ec.genKeyPair();
+    const privateKey =  key.getPrivate()
+    const publicKey = key.getPublic()
+    return { privateKey, publicKey };
+}
+}
+
+
+
+// Usage example
+async function scanForOwnedStealthAddresses(privateKey, allEphemeralPublicKeys) {
+  const stealth = new StealthAddress();
+  const ownedAddresses = await stealth.parseAndCheckStealthAddresses(privateKey, allEphemeralPublicKeys);
+  
+  console.log('Owned Stealth Addresses:');
+  ownedAddresses.forEach(addr => console.log(addr.stealthAddress));
+}
+
+
+// function generateEphemeralKeyPair() {
+//     const privateKey = ethers.randomBytes(32);
+//     const publicKey = this.curve.getPublicKey(privateKey);
+//     return { privateKey, publicKey };
+//   }
+
+
+const stealthGen = new StealthAddress();
+
+const {privateKey: recipientPrivateKey, publicKey: recipientPublicKey} = stealthGen.generateEphemeralKeyPair(); 
+
+const {ephemeralPublicKey, stealthPublicKey, stealthAddress} = stealthGen.generateStealthAddress(recipientPublicKey);
+
+fs.writeFileSync('ephemeralPublicKeys.txt', ephemeralPublicKey + '\n', { flag: 'a' });
+
+console.log('Eph Public key ============> \n', ephemeralPublicKey,'Stealth public key ============> \n', stealthPublicKey, 'Stealth adress ============> \n',stealthAddress)
+
+// ITS A MOCK --- PLS REMEMBER TO FIX IT LATER, THE EPHEMERAL KEYS SHOULD COME FROM SCANNING THROUGH THE BLOCKCHAIN NETWORK
+const allEphemeralPublicKeysFromNetwork = fs.readFileSync('ephemeralPublicKeys.txt', 'utf-8').split('\n').filter(Boolean);
+
+// return {
+//   ephemeralPublicKey: ephemeral.publicKey,
+//   stealthPublicKey,
+//   stealthAddress
+// };
+
+// const recipientPrivateKeyHex = '0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+// const recipientPublicKeyHex = ec.keyFromPrivate(Buffer.from(recipientPrivateKeyHex.slice(2), 'hex')).getPublic('hex'); // Convert private key to public key hex
+
+
+// You would call this function periodically or when new ephemeral public keys are published
+scanForOwnedStealthAddresses(recipientPrivateKey, allEphemeralPublicKeysFromNetwork);
